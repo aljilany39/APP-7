@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>برنامج محاسبي مبسّط (متصفح)</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#1f2937;--text:#e5e7eb;--accent:#22c55e;--danger:#ef4444;--warn:#f59e0b;--shadow:0 10px 30px rgba(0,0,0,.3);} 
+    *{box-sizing:border-box;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
+    body{margin:0;background:linear-gradient(180deg,#0b1220,#111827);color:var(--text)}
+    header{position:sticky;top:0;z-index:5;background:#0b1220aa;backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid #243044}
+    .wrap{max-width:1050px;margin:auto;padding:18px}
+    h1{margin:8px 0 14px;font-size:22px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{padding:10px 14px;background:var(--muted);border:1px solid #2b364a;border-radius:12px;cursor:pointer;user-select:none}
+    .tab.active{background:#0d2742;border-color:#2f6db7}
+    .grid{display:grid;gap:14px}
+    @media(min-width:900px){.grid-2{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #1f2a3d;border-radius:16px;box-shadow:var(--shadow)}
+    .card h2{margin:0 0 8px;font-size:18px}
+    .card .body{padding:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    input,select,textarea{background:#0b1220;border:1px solid #26334a;color:var(--text);padding:10px;border-radius:10px;width:100%}
+    textarea{min-height:70px}
+    label{font-size:13px;opacity:.85}
+    .btn{border:1px solid #2b364a;background:#0b1220;color:var(--text);padding:9px 12px;border-radius:10px;cursor:pointer}
+    .btn.primary{background:#0f3b1f;border-color:#1e7c4a}
+    .btn.primary:hover{background:#125129}
+    .btn.warn{background:#3b2e0f;border-color:#8c6a14}
+    .btn.danger{background:#3b0f12;border-color:#84212a}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:12px}
+    th,td{border-bottom:1px solid #22304a;padding:10px;text-align:center;font-size:14px}
+    thead th{background:#0f2139;position:sticky;top:0}
+    .actions{display:flex;gap:6px;justify-content:center}
+    .muted{opacity:.8;font-size:13px}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid #334155}
+    .ok{color:#86efac;border-color:#166534}
+    .bad{color:#fda4af;border-color:#7f1d1d}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+    .modal.show{display:flex}
+    .modal .panel{background:var(--card);border:1px solid #26334a;border-radius:18px;max-width:1000px;width:100%;max-height:85vh;display:flex;flex-direction:column}
+    .panel header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#0f2139;border-bottom:1px solid #243044}
+    .panel header h3{margin:0;font-size:18px}
+    .panel .content{padding:14px;overflow:auto}
+    .totals{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .total{padding:8px 12px;background:#0b1220;border:1px solid #2b364a;border-radius:10px}
+    .hint{font-size:12px;opacity:.8;margin-top:6px}
+    .empty{padding:16px;text-align:center;opacity:.8}
+    /* طلبات وشحنات */
+    .orders-table button, .shipments-table button { padding:6px 8px; font-size:13px; }
+    .filter-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>برنامج محاسبي مبسّط (سندات + فواتير + طلبات + شحنات)</h1>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="ops">العمليات</button>
+        <button class="tab" data-tab="parties">العملاء والموردين</button>
+        <button class="tab" data-tab="funds">الصناديق</button>
+        <button class="tab" data-tab="orders">طلبات قيد التجهيز</button>
+        <button class="tab" data-tab="shipments">تتبع الشحنات</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- العمليات -->
+    <section id="tab-ops">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="body">
+            <h2>سند قبض / فاتورة مبيعات</h2>
+            <div class="row">
+              <div style="flex:2">
+                <label>العميل</label>
+                <select id="rcptCustomer"></select>
+              </div>
+              <div style="flex:2">
+                <label>الصندوق</label>
+                <select id="rcptFund"></select>
+              </div>
+              <div style="flex:1">
+                <label>المبلغ</label>
+                <input id="rcptAmount" type="number" min="0" step="0.01" placeholder="0.00" />
+              </div>
+            </div>
+            <div class="row">
+              <div style="flex:1">
+                <label>التاريخ</label>
+                <input id="rcptDate" type="date" />
+              </div>
+              <div style="flex:2">
+                <label>ملاحظة</label>
+                <input id="rcptNote" type="text" placeholder="اختياري" />
+              </div>
+            </div>
+            <div class="row">
+              <div style="flex:2">
+                <label>نوع العملية</label>
+                <select id="rcptType">
+                  <option value="receipt">سند قبض</option>
+                  <option value="invoice">فاتورة مبيعات</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;justify-content:flex-end">
+              <button class="btn primary" id="btnAddReceipt">حفظ</button>
+            </div>
+            <div class="hint">سند القبض: دائن العميل (+ للصندوق). فاتورة المبيعات: مدين العميل (+ العميل، - للصندوق)</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="body">
+            <h2>سند صرف / فاتورة مشتريات</h2>
+            <div class="row">
+              <div style="flex:2">
+                <label>المورد</label>
+                <select id="paySupplier"></select>
+              </div>
+              <div style="flex:2">
+                <label>الصندوق</label>
+                <select id="payFund"></select>
+              </div>
+              <div style="flex:1">
+                <label>المبلغ</label>
+                <input id="payAmount" type="number" min="0" step="0.01" placeholder="0.00" />
+              </div>
+            </div>
+            <div class="row">
+              <div style="flex:1">
+                <label>التاريخ</label>
+                <input id="payDate" type="date" />
+              </div>
+              <div style="flex:2">
+                <label>ملاحظة</label>
+                <input id="payNote" type="text" placeholder="اختياري" />
+              </div>
+            </div>
+            <div class="row">
+              <div style="flex:2">
+                <label>نوع العملية</label>
+                <select id="payType">
+                  <option value="payment">سند صرف</option>
+                  <option value="purchase">فاتورة مشتريات</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;justify-content:flex-end">
+              <button class="btn primary" id="btnAddPayment">حفظ</button>
+            </div>
+            <div class="hint">سند الصرف: مدين المورد (- للصندوق). فاتورة المشتريات: دائن المورد (+ للمورد، - للصندوق)</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- العملاء والموردين -->
+    <section id="tab-parties" style="display:none">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="body">
+            <h2>العملاء</h2>
+            <div class="row">
+              <input id="custName" placeholder="اسم العميل" />
+              <button class="btn primary" id="addCustomer">إضافة</button>
+            </div>
+            <div class="hint">لا يمكن حذف عميل عليه حركات.</div>
+            <div id="customersTableWrap" style="margin-top:10px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="body">
+            <h2>الموردون</h2>
+            <div class="row">
+              <input id="suppName" placeholder="اسم المورد" />
+              <button class="btn primary" id="addSupplier">إضافة</button>
+            </div>
+            <div class="hint">لا يمكن حذف مورد عليه حركات.</div>
+            <div id="suppliersTableWrap" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- الصناديق -->
+    <section id="tab-funds" style="display:none">
+      <div class="card">
+        <div class="body">
+          <h2>الصناديق</h2>
+          <div class="row">
+            <input id="fundName" placeholder="اسم الصندوق" />
+            <input id="fundOpenBal" type="number" step="0.01" placeholder="رصيد افتتاحي (اختياري)" />
+            <button class="btn primary" id="addFund">إضافة</button>
+          </div>
+          <div class="hint">الرصيد الحالي = الافتتاحي ± الحركات. لا يمكن حذف صندوق عليه حركات.</div>
+          <div id="fundsTableWrap" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- الطلبات -->
+    <section id="tab-orders" style="display:none">
+      <div class="card">
+        <div class="body">
+          <h2>إضافة طلب قيد التجهيز</h2>
+          <div class="row">
+            <div style="flex:2">
+              <label>المورد</label>
+              <select id="orderSupplier"></select>
+            </div>
+            <div style="flex:2">
+              <label>الصندوق (للعربون)</label>
+              <select id="orderFund"></select>
+            </div>
+            <div style="flex:2">
+              <label>اسم المنتج</label>
+              <input id="orderProduct" placeholder="اسم المنتج" />
+            </div>
+            <div style="flex:1">
+              <label>مبلغ العربون</label>
+              <input id="orderDeposit" type="number" min="0" step="0.01" placeholder="0.00" />
+            </div>
+            <div style="flex:1">
+              <label>التكلفة الكلية</label>
+              <input id="orderTotal" type="number" min="0" step="0.01" placeholder="0.00" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <div style="flex:3">
+              <label>التاريخ</label>
+              <input id="orderDate" type="date" />
+            </div>
+            <div style="flex:3">
+              <label>ملاحظة</label>
+              <input id="orderNote" placeholder="اختياري" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;justify-content:flex-end">
+            <button class="btn primary" id="btnAddOrder">حفظ الطلب (ينقص العربون من الصندوق)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="body">
+          <h2>قائمة الطلبات</h2>
+          <div id="ordersTableWrap" class="orders-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- تتبع الشحنات (جديد) -->
+    <section id="tab-shipments" style="display:none">
+      <div class="card">
+        <div class="body">
+          <h2>إضافة شحنة جديدة</h2>
+          <div class="row">
+            <div style="flex:2">
+              <label>رقم الشحنة</label>
+              <input id="shipNumberInput" placeholder="رقم الشحنة" />
+            </div>
+            <div style="flex:1">
+              <label>عدد الكراتين</label>
+              <input id="shipBoxesInput" type="number" min="0" step="1" placeholder="0" />
+            </div>
+            <div style="flex:2">
+              <label>شركة الشحن</label>
+              <input id="shipCarrierInput" placeholder="شركة الشحن" />
+            </div>
+            <div style="flex:2">
+              <label>التاريخ</label>
+              <input id="shipDateInput" type="date" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div style="flex:3">
+              <label>ملاحظة</label>
+              <input id="shipNoteInput" placeholder="اختياري" />
+            </div>
+            <div style="flex:2">
+              <label>الحالة</label>
+              <select id="shipStatusInput">
+                <option value="in_transit">قيد النقل</option>
+                <option value="delivered">تم التسليم</option>
+                <option value="cancelled">ملغي</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;justify-content:flex-end">
+            <button class="btn primary" id="btnAddShipment">إضافة / تحديث الشحنة</button>
+          </div>
+          <div class="hint">الحقول تُخزن في قاعدة بيانات البرنامج تحت DB.shipments (أرشيف تحت DB.shipmentsArchive).</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="body">
+          <h2>قائمة الشحنات</h2>
+          <div class="filter-row">
+            <label style="margin:0">فلتر:</label>
+            <select id="shipFilter">
+              <option value="all">الكل</option>
+              <option value="in_transit">قيد النقل</option>
+              <option value="delivered">تم التسليم</option>
+              <option value="cancelled">ملغي</option>
+              <option value="archived">الأرشيف</option>
+            </select>
+            <button class="btn" id="btnClearFilter">مسح</button>
+          </div>
+          <div id="shipmentsTableWrap" class="shipments-table"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal كشف الحساب / عرض -->
+  <div class="modal" id="statementModal" aria-hidden="true">
+    <div class="panel">
+      <header>
+        <h3 id="statementTitle">عرض</h3>
+        <div class="actions"><button class="btn" id="closeModal">إغلاق</button></div>
+      </header>
+      <div class="content">
+        <div id="statementInfo" class="muted" style="margin-bottom:8px"></div>
+        <div style="overflow:auto">
+          <table id="statementTable">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>النوع</th>
+                <th>الوصف</th>
+                <th>مدين</th>
+                <th>دائن</th>
+                <th>الرصيد بعد الحركة</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="totals" style="margin-top:10px">
+          <div class="total">الرصيد النهائي: <b id="finalBalance">0.00</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const KEY='mini-acc-data-v2';
+const nowDate=()=>new Date().toISOString().slice(0,10);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const money=n=>Number(n||0).toFixed(2);
+
+const load=()=>{
+  const raw=localStorage.getItem(KEY);
+  if(!raw) return {customers:[],suppliers:[],funds:[],tx:[],orders:[],shipments:[],shipmentsArchive:[]};
+  try{
+    const parsed=JSON.parse(raw);
+    if(!parsed.orders) parsed.orders=[];
+    if(!parsed.shipments) parsed.shipments=[];
+    if(!parsed.shipmentsArchive) parsed.shipmentsArchive=[];
+    return parsed;
+  }catch{
+    return {customers:[],suppliers:[],funds:[],tx:[],orders:[],shipments:[],shipmentsArchive:[]};
+  }
+}
+const save=()=>localStorage.setItem(KEY, JSON.stringify(DB));
+let DB=load();
+let showCtx=null; // سياق كشف مفتوح (نوع,id)
+
+// --- تبويب ---
+document.querySelectorAll('#tabs .tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#tabs .tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const id=btn.dataset.tab;
+    ['ops','parties','funds','orders','shipments'].forEach(t=>{
+      const elTab=document.getElementById('tab-'+t);
+      if(elTab) elTab.style.display = (t===id)?'block':'none';
+    });
+  });
+});
+
+// --- عناصر ---
+const el={
+  rcptCustomer:document.getElementById('rcptCustomer'),
+  rcptFund:document.getElementById('rcptFund'),
+  rcptAmount:document.getElementById('rcptAmount'),
+  rcptDate:document.getElementById('rcptDate'),
+  rcptNote:document.getElementById('rcptNote'),
+  rcptType:document.getElementById('rcptType'),
+  paySupplier:document.getElementById('paySupplier'),
+  payFund:document.getElementById('payFund'),
+  payAmount:document.getElementById('payAmount'),
+  payDate:document.getElementById('payDate'),
+  payNote:document.getElementById('payNote'),
+  payType:document.getElementById('payType'),
+  customersTableWrap:document.getElementById('customersTableWrap'),
+  suppliersTableWrap:document.getElementById('suppliersTableWrap'),
+  fundsTableWrap:document.getElementById('fundsTableWrap'),
+  custName:document.getElementById('custName'),
+  suppName:document.getElementById('suppName'),
+  fundName:document.getElementById('fundName'),
+  fundOpenBal:document.getElementById('fundOpenBal'),
+  modal:document.getElementById('statementModal'),
+  stTitle:document.getElementById('statementTitle'),
+  stInfo:document.getElementById('statementInfo'),
+  stTable:document.querySelector('#statementTable tbody'),
+  stFinal:document.getElementById('finalBalance'),
+  // orders
+  orderSupplier:document.getElementById('orderSupplier'),
+  orderFund:document.getElementById('orderFund'),
+  orderProduct:document.getElementById('orderProduct'),
+  orderDeposit:document.getElementById('orderDeposit'),
+  orderTotal:document.getElementById('orderTotal'),
+  orderDate:document.getElementById('orderDate'),
+  orderNote:document.getElementById('orderNote'),
+  ordersTableWrap:document.getElementById('ordersTableWrap'),
+  // shipments
+  shipNumberInput:document.getElementById('shipNumberInput'),
+  shipBoxesInput:document.getElementById('shipBoxesInput'),
+  shipCarrierInput:document.getElementById('shipCarrierInput'),
+  shipDateInput:document.getElementById('shipDateInput'),
+  shipNoteInput:document.getElementById('shipNoteInput'),
+  shipStatusInput:document.getElementById('shipStatusInput'),
+  shipmentsTableWrap:document.getElementById('shipmentsTableWrap'),
+  shipFilter:document.getElementById('shipFilter'),
+  btnClearFilter:document.getElementById('btnClearFilter'),
+};
+if(el.rcptDate) el.rcptDate.value = nowDate();
+if(el.payDate) el.payDate.value = nowDate();
+if(el.orderDate) el.orderDate.value = nowDate();
+if(el.shipDateInput) el.shipDateInput.value = nowDate();
+
+// --- رندرة لائحات الاختيار ---
+function refreshSelectors(){
+  const fill=(sel,arr,placeholder)=>{
+    if(!sel) return;
+    sel.innerHTML='';
+    const opt0=document.createElement('option'); opt0.value=''; opt0.textContent=placeholder; sel.appendChild(opt0);
+    arr.forEach(x=>{const o=document.createElement('option'); o.value=x.id; o.textContent=x.name; sel.appendChild(o);});
+  };
+  fill(el.rcptCustomer, DB.customers, 'اختر عميل');
+  fill(el.rcptFund, DB.funds, 'اختر صندوق');
+  fill(el.paySupplier, DB.suppliers, 'اختر مورد');
+  fill(el.payFund, DB.funds, 'اختر صندوق');
+  fill(el.orderSupplier, DB.suppliers, 'اختر مورد');
+  fill(el.orderFund, DB.funds, 'اختر صندوق');
+}
+
+// --- جداول CRUD للكائنات الأساسية ---
+function hasMovementsFor(kind, id){
+  return DB.tx.some(t=> (kind==='customer' && (t.customerId===id)) || (kind==='supplier' && (t.supplierId===id)) || (kind==='fund' && t.fundId===id) || (kind==='supplier' && DB.orders.some(o=>o.supplierId===id)));
+}
+
+function tableHtml(items, kind){
+  if(!items.length) return `<div class="empty">لا توجد بيانات بعد.</div>`;
+  let headers=''; if(kind==='fund') headers='<th>الاسم</th><th>الرصيد الحالي</th><th>إجراءات</th>'; else headers='<th>الاسم</th><th>إجراءات</th>';
+  let rows='';
+  items.forEach(x=>{
+    const statementBtn = `<button class="btn" data-act="statement" data-kind="${kind}" data-id="${x.id}">كشف الحساب</button>`;
+    const editBtn = `<button class="btn warn" data-act="edit" data-kind="${kind}" data-id="${x.id}">تعديل</button>`;
+    const delBtn = `<button class="btn danger" data-act="del" data-kind="${kind}" data-id="${x.id}">حذف</button>`;
+    if(kind==='fund'){
+      const bal = calcFundBalance(x.id);
+      rows += `<tr><td>${x.name}</td><td><span class="pill ${bal>=0?'ok':'bad'}">${money(bal)}</span></td><td class="actions">${statementBtn}${editBtn}${delBtn}</td></tr>`;
+    }else{rows += `<tr><td>${x.name}</td><td class="actions">${statementBtn}${editBtn}${delBtn}</td></tr>`;}
+  });
+  return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderLists(){
+  el.customersTableWrap.innerHTML = tableHtml(DB.customers, 'customer');
+  el.suppliersTableWrap.innerHTML = tableHtml(DB.suppliers, 'supplier');
+  el.fundsTableWrap.innerHTML     = tableHtml(DB.funds, 'fund');
+  [el.customersTableWrap, el.suppliersTableWrap, el.fundsTableWrap].forEach(wrap=>{
+    wrap.querySelectorAll('button[data-act]')?.forEach(btn=>{btn.addEventListener('click', btnAction);});
+  });
+  refreshSelectors();
+  renderOrdersTable();
+  renderShipmentsTable(); // render shipments as part of lists
+}
+
+// --- إضافة العملاء والموردين والصناديق ---
+document.getElementById('addCustomer')?.addEventListener('click',()=>{
+  const name=el.custName.value.trim(); if(!name){alert('أدخل اسم العميل');return;}
+  DB.customers.push({id:uid(),name}); save(); el.custName.value=''; renderLists();
+});
+document.getElementById('addSupplier')?.addEventListener('click',()=>{
+  const name=el.suppName.value.trim(); if(!name){alert('أدخل اسم المورد');return;}
+  DB.suppliers.push({id:uid(),name}); save(); el.suppName.value=''; renderLists();
+});
+document.getElementById('addFund')?.addEventListener('click',()=>{
+  const name=el.fundName.value.trim(); if(!name){alert('أدخل اسم الصندوق');return;}
+  const openBal=parseFloat(el.fundOpenBal.value)||0;
+  DB.funds.push({id:uid(),name,openBal}); save(); el.fundName.value=''; el.fundOpenBal.value=''; renderLists();
+});
+
+// --- إضافة عمليات (سند/فاتورة) ---
+document.getElementById('btnAddReceipt')?.addEventListener('click',()=>{
+  const cid=el.rcptCustomer.value; if(!cid){alert('اختر العميل');return;}
+  const fid=el.rcptFund.value; if(!fid){alert('اختر الصندوق');return;}
+  const amt=parseFloat(el.rcptAmount.value); if(!amt){alert('أدخل المبلغ');return;}
+  const type=el.rcptType.value;
+  DB.tx.push({id:uid(),type,date:el.rcptDate.value,amount:amt,customerId:cid,fundId:fid,note:el.rcptNote.value});
+  save(); el.rcptAmount.value=''; el.rcptNote.value=''; alert('تم إضافة العملية'); 
+});
+document.getElementById('btnAddPayment')?.addEventListener('click',()=>{
+  const sid=el.paySupplier.value; if(!sid){alert('اختر المورد');return;}
+  const fid=el.payFund.value; if(!fid){alert('اختر الصندوق');return;}
+  const amt=parseFloat(el.payAmount.value); if(!amt){alert('أدخل المبلغ');return;}
+  const type=el.payType.value;
+  DB.tx.push({id:uid(),type,date:el.payDate.value,amount:amt,supplierId:sid,fundId:fid,note:el.payNote.value});
+  save(); el.payAmount.value=''; el.payNote.value=''; alert('تم إضافة العملية');
+});
+
+// --- الطلبات: إضافة / جدول / تحويل / حذف ---
+document.getElementById('btnAddOrder')?.addEventListener('click',()=>{
+  const supplierId = el.orderSupplier.value; if(!supplierId){return alert('اختر المورد');}
+  const fundId = el.orderFund.value; if(!fundId){return alert('اختر الصندوق للعربون');}
+  const product = (el.orderProduct.value||'').trim(); if(!product) return alert('أدخل اسم المنتج');
+  const deposit = parseFloat(el.orderDeposit.value)||0;
+  const total = parseFloat(el.orderTotal.value)||0;
+  const date = el.orderDate.value || nowDate();
+  const note = el.orderNote.value || '';
+  // انشاء الطلب
+  const order = { id: uid(), supplierId, fundId, product, deposit, total, remaining: (total - deposit), date, note, status:'pending', paymentId:null, purchaseId:null };
+  // اذا العربون > 0 نسجل عملية صرف (سند صرف) تسحب من الصندوق وتُسجل للمورد كدفعة
+  if(deposit > 0){
+    const payTx = { id: uid(), type: 'payment', date, amount: deposit, supplierId, fundId, note: `عربون - طلب ${order.id}` };
+    DB.tx.push(payTx);
+    order.paymentId = payTx.id;
+  }
+  DB.orders.push(order);
+  save();
+  // تنظيف الحقول
+  el.orderProduct.value=''; el.orderDeposit.value=''; el.orderTotal.value=''; el.orderNote.value='';
+  renderLists();
+  alert('تم إضافة الطلب والعربون (إن وُجد) تم تسجيله كرسم حركة.');
+});
+
+function renderOrdersTable(){
+  const arr = DB.orders || [];
+  if(!arr.length){ el.ordersTableWrap.innerHTML = '<div class="empty">لا توجد طلبات بعد.</div>'; return; }
+  let rows = `<table><thead><tr><th>رقم الطلب</th><th>المنتج</th><th>المورد</th><th>العربون</th><th>التكلفة الكلية</th><th>المتبقي</th><th>التاريخ</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>`;
+  arr.forEach(o=>{
+    const supplierName = (DB.suppliers.find(s=>s.id===o.supplierId)?.name) || '-';
+    rows += `<tr>
+      <td>${o.id}</td>
+      <td>${o.product}</td>
+      <td>${supplierName}</td>
+      <td>${money(o.deposit)}</td>
+      <td>${money(o.total)}</td>
+      <td>${money(o.total - o.deposit)}</td>
+      <td>${o.date}</td>
+      <td>${o.status}</td>
+      <td class="actions">
+        <button class="btn" onclick="viewOrder('${o.id}')">عرض</button>
+        <button class="btn primary" onclick="convertOrderToPurchase('${o.id}')" ${o.status==='completed'?'disabled':''}>تحويل لفاتورة مشتريات</button>
+        <button class="btn danger" onclick="deleteOrder('${o.id}')">حذف</button>
+      </td>
+    </tr>`;
+  });
+  rows += `</tbody></table>`;
+  el.ordersTableWrap.innerHTML = rows;
+}
+
+// عرض تفاصيل الطلب
+function viewOrder(orderId){
+  const o = DB.orders.find(x=>x.id===orderId); if(!o) return alert('الطلب غير موجود');
+  const supplierName = (DB.suppliers.find(s=>s.id===o.supplierId)?.name) || '-';
+  const fundName = (DB.funds.find(f=>f.id===o.fundId)?.name) || '-';
+  el.stTitle.textContent = `تفاصيل الطلب: ${orderId}`;
+  el.stInfo.textContent = `المنتج: ${o.product} — المورد: ${supplierName} — العربون: ${money(o.deposit)} — التكلفة: ${money(o.total)} — الحالة: ${o.status}`;
+  el.stTable.innerHTML = `<tr><td colspan="6" class="empty">ملاحظة: ${o.note || '-'}</td></tr>`;
+  el.stFinal.textContent = money(o.total - o.deposit);
+  el.modal.classList.add('show');
+}
+
+// تحويل الطلب إلى فاتورة مشتريات
+function convertOrderToPurchase(orderId){
+  const o = DB.orders.find(x=>x.id===orderId); if(!o) return alert('الطلب غير موجود');
+  if(o.status === 'completed') return alert('هذا الطلب مُنجز سابقًا');
+  if(!confirm('تحويل الطلب إلى فاتورة مشتريات سيُسجل فاتورة بمبلغ التكلفة الكلية. هل تريد المتابعة؟')) return;
+  const purchaseTx = { id: uid(), type:'purchase', date: nowDate(), amount: o.total, supplierId: o.supplierId, fundId: null, note: `فاتورة مشتريات من تحويل الطلب ${o.id}` };
+  DB.tx.push(purchaseTx);
+  o.purchaseId = purchaseTx.id;
+  o.status = 'completed';
+  save();
+  renderLists();
+  alert('تم إنشاء فاتورة مشتريات وإتمام الطلب. العربون تم احتسابه مسبقًا.');
+}
+
+// حذف الطلب
+function deleteOrder(orderId){
+  if(!confirm('هل تريد حذف هذا الطلب؟ (سيبقى السجل المالي للعربون ما لم تختَر حذفه يدوياً)')) return;
+  const idx = DB.orders.findIndex(o=>o.id===orderId);
+  if(idx<0) return;
+  DB.orders.splice(idx,1);
+  save();
+  renderLists();
+  alert('تم حذف الطلب (لم تُحذف المعاملات المالية المرتبطة تلقائياً).');
+}
+
+// --- تتبع الشحنات (جديد) ---
+function renderShipmentsTable(filter='all'){
+  const arr = DB.shipments || [];
+  const archived = DB.shipmentsArchive || [];
+  const wrap = el.shipmentsTableWrap;
+  const f = filter || (el.shipFilter?.value || 'all');
+  const source = (f==='archived') ? archived : arr.filter(s=> (f==='all')?true: s.status===f );
+  if(!source.length){
+    wrap.innerHTML = '<div class="empty">لا توجد شحنات للاطلاع.</div>';
+    return;
+  }
+  let rows = `<table><thead><tr><th>#</th><th>رقم الشحنة</th><th>الكراتين</th><th>شركة الشحن</th><th>التاريخ</th><th>ملاحظة</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>`;
+  source.forEach((s,i)=>{
+    rows += `<tr>
+      <td>${i+1}</td>
+      <td>${s.number}</td>
+      <td>${s.boxes || 0}</td>
+      <td>${s.carrier || '-'}</td>
+      <td>${s.date || '-'}</td>
+      <td>${s.note || '-'}</td>
+      <td>${s.status === 'in_transit' ? 'قيد النقل' : s.status === 'delivered' ? 'تم التسليم' : 'ملغي'}</td>
+      <td class="actions">
+        <button class="btn" onclick="editShipment('${s.id}','${f==='archived' ? 'archived' : 'active'}')">تعديل</button>
+        ${f==='archived' ? `<button class="btn" onclick="restoreShipment('${s.id}')">استعادة</button>` : `<button class="btn warn" onclick="archiveShipment('${s.id}')">أرشفة</button>`}
+        <button class="btn primary" onclick="toggleShipmentStatus('${s.id}','${f==='archived' ? 'archived' : 'active'}')">تغيير الحالة</button>
+      </td>
+    </tr>`;
+  });
+  rows += `</tbody></table>`;
+  wrap.innerHTML = rows;
+}
+
+// إضافة/تحديث شحنة
+document.getElementById('btnAddShipment')?.addEventListener('click',()=>{
+  const number = (el.shipNumberInput.value||'').trim();
+  if(!number) return alert('أدخل رقم الشحنة');
+  const boxes = parseInt(el.shipBoxesInput.value||0) || 0;
+  const carrier = (el.shipCarrierInput.value||'').trim();
+  const date = el.shipDateInput.value || nowDate();
+  const note = (el.shipNoteInput.value||'').trim();
+  const status = el.shipStatusInput.value || 'in_transit';
+
+  // إذا كان هناك شحنة بنفس الرقم في DB.shipments -> تحديثها
+  let idx = DB.shipments.findIndex(s=>s.number===number);
+  if(idx >= 0){
+    DB.shipments[idx].boxes = boxes;
+    DB.shipments[idx].carrier = carrier;
+    DB.shipments[idx].date = date;
+    DB.shipments[idx].note = note;
+    DB.shipments[idx].status = status;
+    DB.shipments[idx].updatedAt = new Date().toISOString();
+    save();
+    renderShipmentsTable(el.shipFilter?.value || 'all');
+    alert('تم تحديث الشحنة');
+    clearShipmentInputs();
+    return;
+  }
+  // إضافة شحنة جديدة
+  const shipment = { id: uid(), number, boxes, carrier, date, note, status, createdAt:new Date().toISOString() };
+  DB.shipments.push(shipment);
+  save();
+  renderShipmentsTable(el.shipFilter?.value || 'all');
+  alert('تم إضافة الشحنة');
+  clearShipmentInputs();
+});
+
+function clearShipmentInputs(){
+  el.shipNumberInput.value=''; el.shipBoxesInput.value=''; el.shipCarrierInput.value=''; el.shipDateInput.value=nowDate(); el.shipNoteInput.value=''; el.shipStatusInput.value='in_transit';
+}
+
+// تعديل شحنة (يأخذ من القوائم سواء الأرشيف أو النشط)
+function editShipment(id, source='active'){
+  const list = (source==='archived') ? DB.shipmentsArchive : DB.shipments;
+  const s = list.find(x=>x.id===id);
+  if(!s) return alert('الشحنة غير موجودة');
+  // ملء الحقول لتحريرها
+  el.shipNumberInput.value = s.number;
+  el.shipBoxesInput.value = s.boxes || 0;
+  el.shipCarrierInput.value = s.carrier || '';
+  el.shipDateInput.value = s.date || nowDate();
+  el.shipNoteInput.value = s.note || '';
+  el.shipStatusInput.value = s.status || 'in_transit';
+  // إذا كانت من الأرشيف، نخبر المستخدم أنه سيضيف نسخة نشطة عند حفظها
+  alert('تم تحميل بيانات الشحنة في النموذج. اضغط "إضافة / تحديث الشحنة" لحفظ التغييرات.');
+}
+
+// أرشفة شحنة (تنقل من shipments -> shipmentsArchive)
+function archiveShipment(id){
+  if(!confirm('هل تريد أرشفة هذه الشحنة؟ سيتم نقلها إلى الأرشيف.')) return;
+  const idx = DB.shipments.findIndex(s=>s.id===id);
+  if(idx<0) return alert('الشحنة غير موجودة');
+  const [s] = DB.shipments.splice(idx,1);
+  DB.shipmentsArchive = DB.shipmentsArchive || [];
+  DB.shipmentsArchive.push(Object.assign({}, s, {archivedAt: new Date().toISOString()}));
+  save();
+  renderShipmentsTable(el.shipFilter?.value || 'all');
+  alert('تم أرشفة الشحنة');
+}
+
+// استعادة من الأرشيف
+function restoreShipment(id){
+  if(!confirm('استعادة الشحنة من الأرشيف إلى القائمة النشطة؟')) return;
+  const idx = (DB.shipmentsArchive||[]).findIndex(s=>s.id===id);
+  if(idx<0) return alert('الشحنة غير موجودة في الأرشيف');
+  const [s] = DB.shipmentsArchive.splice(idx,1);
+  DB.shipments.push(s);
+  save();
+  renderShipmentsTable(el.shipFilter?.value || 'all');
+  alert('تم استعادة الشحنة');
+}
+
+// تبديل الحالة (in_transit <-> delivered) — يدعم الأرشيف أيضًا (لن يغير موقعها)
+function toggleShipmentStatus(id, source='active'){
+  const list = (source==='archived') ? DB.shipmentsArchive : DB.shipments;
+  const s = list.find(x=>x.id===id);
+  if(!s) return alert('الشحنة غير موجودة');
+  if(s.status === 'in_transit') s.status='delivered';
+  else if(s.status === 'delivered') s.status='in_transit';
+  else if(s.status === 'cancelled') s.status='in_transit';
+  s.updatedAt = new Date().toISOString();
+  save();
+  renderShipmentsTable(el.shipFilter?.value || 'all');
+  alert('تم تغيير حالة الشحنة إلى: ' + s.status);
+}
+
+// فلتر الشحنات
+el.shipFilter?.addEventListener('change', ()=> renderShipmentsTable(el.shipFilter.value));
+el.btnClearFilter?.addEventListener('click', ()=>{ if(el.shipFilter) el.shipFilter.value='all'; renderShipmentsTable('all'); });
+
+// --- كشف الحساب --- (كما كان سابقاً) ---
+function calcFundBalance(fid){
+  let bal=0; const txs=DB.tx.filter(t=>t.fundId===fid);
+  DB.funds.forEach(f=>{if(f.id===fid) bal+=parseFloat(f.openBal||0);});
+  txs.forEach(t=>{
+    if(t.type==='receipt') bal+=t.amount;
+    else if(t.type==='invoice') bal-=t.amount;
+    else if(t.type==='payment') bal-=t.amount;
+    else if(t.type==='purchase') bal-=t.amount;
+  });
+  return bal;
+}
+function showStatement(kind, id){
+  showCtx={kind,id};
+  let name='', txs=[];
+  if(kind==='customer'){ const c=DB.customers.find(c=>c.id===id); if(!c)return; name=c.name; txs=DB.tx.filter(t=>t.customerId===id);}
+  else if(kind==='supplier'){ const s=DB.suppliers.find(s=>s.id===id); if(!s)return; name=s.name; txs=DB.tx.filter(t=>t.supplierId===id);}
+  else if(kind==='fund'){ const f=DB.funds.find(f=>f.id===id); if(!f)return; name=f.name; txs=DB.tx.filter(t=>t.fundId===id);}
+  el.stTitle.textContent='كشف الحساب: '+name;
+  el.stInfo.textContent = `عدد الحركات: ${txs.length}`;
+  el.stTable.innerHTML='';
+  let balance=0;
+  txs.sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
+    let debit=0, credit=0, desc=t.note||t.type;
+    if(kind==='customer'){
+      if(t.type==='receipt'){credit=t.amount; balance-=credit;} // سند قبض: دائن
+      else if(t.type==='invoice'){debit=t.amount; balance+=debit;} // فاتورة مبيعات: مدين
+    } else if(kind==='supplier'){
+      if(t.type==='payment'){debit=t.amount; balance+=debit;} // سند صرف: مدين
+      else if(t.type==='purchase'){credit=t.amount; balance-=credit;} // فاتورة مشتريات: دائن
+    } else if(kind==='fund'){
+      if(t.type==='receipt') debit=t.amount; 
+      else if(t.type==='invoice') debit=-t.amount; 
+      else if(t.type==='payment') credit=t.amount; 
+      else if(t.type==='purchase') credit=t.amount;
+      balance=calcFundBalance(id);
+    }
+    const delBtn = ` <button class="btn danger" style="padding:4px 8px;font-size:12px" onclick="deleteTx('${t.id}')">حذف العملية</button>`;
+    el.stTable.innerHTML += `<tr>
+      <td>${t.date}</td>
+      <td>${t.type}</td>
+      <td>${desc}${delBtn}</td>
+      <td>${debit?money(debit):''}</td>
+      <td>${credit?money(credit):''}</td>
+      <td>${money(balance)}</td>
+    </tr>`;
+  });
+  el.stFinal.textContent=money(balance);
+  el.modal.classList.add('show');
+}
+
+function deleteTx(id){
+  if(!confirm('تأكيد حذف العملية؟')) return;
+  const idx=DB.tx.findIndex(t=>t.id===id);
+  if(idx<0) return;
+  DB.tx.splice(idx,1);
+  save();
+  if(showCtx){ showStatement(showCtx.kind, showCtx.id); }
+  else{ renderLists(); alert('تم حذف العملية'); }
+}
+
+// --- إغلاق المودال ---
+document.getElementById('closeModal')?.addEventListener('click',()=>el.modal.classList.remove('show'));
+el.modal?.addEventListener('click', e=>{ if(e.target===el.modal) el.modal.classList.remove('show'); });
+
+// --- أزرار جداول --- (تعديل/حذف/كشف)
+function btnAction(e){
+  const b=e.currentTarget, act=b.dataset.act, kind=b.dataset.kind, id=b.dataset.id;
+  if(act==='statement'){showStatement(kind,id);}
+  else if(act==='del'){
+    if(hasMovementsFor(kind,id)){alert('لا يمكن حذف عنصر عليه حركات.'); return;}
+    if(kind==='customer') DB.customers=DB.customers.filter(c=>c.id!==id);
+    if(kind==='supplier') DB.suppliers=DB.suppliers.filter(s=>s.id!==id);
+    if(kind==='fund') DB.funds=DB.funds.filter(f=>f.id!==id);
+    save(); renderLists();
+  }
+  else if(act==='edit'){
+    const newName=prompt('ادخل الاسم الجديد');
+    if(!newName) return;
+    if(kind==='customer') DB.customers.find(c=>c.id===id).name=newName;
+    if(kind==='supplier') DB.suppliers.find(s=>s.id===id).name=newName;
+    if(kind==='fund') DB.funds.find(f=>f.id===id).name=newName;
+    save(); renderLists();
+  }
+}
+
+// --- بداية ---
+renderLists();
+</script>
+</body>
+</html>
